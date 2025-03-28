@@ -236,6 +236,7 @@ function formatSRTTime(seconds) {
 
 // Create MediaConvert job parameters
 // Create MediaConvert job parameters
+// Create MediaConvert job parameters
 function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
   return {
     Role: process.env.MEDIACONVERT_ROLE_ARN,
@@ -243,6 +244,11 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
       Inputs: [
         {
           FileInput: videoUrl,
+          AudioSelectors: {
+            "Audio Selector 1": {
+              DefaultSelection: "DEFAULT"
+            }
+          },
           CaptionSelectors: {
             "Captions": {
               SourceSettings: {
@@ -276,6 +282,7 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
               },
               AudioDescriptions: [
                 {
+                  AudioSourceName: "Audio Selector 1",
                   CodecSettings: {
                     Codec: "AAC",
                     AacSettings: {
