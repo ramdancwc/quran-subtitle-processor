@@ -99,6 +99,7 @@ app.post('/process', async (req, res) => {
 });
 
 // Endpoint to check job status
+// Endpoint to check job status
 app.get('/status/:jobId', async (req, res) => {
   const { jobId } = req.params;
   
@@ -136,6 +137,16 @@ app.get('/status/:jobId', async (req, res) => {
         status: 'complete',
         progress: 100,
         outputUrl
+      });
+    } else if (status === 'ERROR') {
+      // Get the error details
+      const errorMessage = jobResult.Job.ErrorMessage || 'Unknown error';
+      console.error(`Job error: ${errorMessage}`);
+      
+      return res.json({
+        success: false,
+        status: 'failed',
+        error: errorMessage
       });
     }
     
