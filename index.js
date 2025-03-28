@@ -5,6 +5,7 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
+const fetch = require('node-fetch');
 
 // Initialize Express app
 const app = express();
@@ -69,9 +70,36 @@ app.post('/process', async (req, res) => {
     
     console.log('SRT file uploaded successfully');
     
+    // Download video from Supabase URL to memory
+    console.log('Downloading video from Supabase...');
+    const videoResponse = await fetch(videoUrl);
+    
+    if (!videoResponse.ok) {
+      throw new Error(`Failed to download video: ${videoResponse.statusText}`);
+    }
+    
+    const videoBuffer = await videoResponse.arrayBuffer();
+    console.log(`Video downloaded: ${videoBuffer.byteLength} bytes`);
+    
+    // Upload video to S3
+    const videoKey = `inputs/${jobId}.mp4`;
+    console.log(`Uploading video to S3: ${videoKey}`);
+    
+    await s3.putObject({
+      Bucket: process.env.S3_BUCKET,
+      Key: videoKey,
+      Body: Buffer.from(videoBuffer),
+      ContentType: 'video/mp4'
+    }).promise();
+    
+    console.log('Video uploaded to S3 successfully');
+    
+    // Now use S3 path for the video input
+    const s3VideoUrl = `s3://${process.env.S3_BUCKET}/${videoKey}`;
+    
     // Create MediaConvert job
     const outputKey = `outputs/${jobId}.mp4`;
-    const params = createMediaConvertParams(videoUrl, srtKey, outputKey, subtitlePreferences || {});
+    const params = createMediaConvertParams(s3VideoUrl, srtKey, outputKey, subtitlePreferences || {});
     
     console.log('Creating MediaConvert job...');
     const job = await mediaConvert.createJob(params).promise();
