@@ -36,7 +36,7 @@ app.get('/', (req, res) => {
 app.post('/process', async (req, res) => {
   try {
     console.log('Received process request');
-    const { videoUrl, verses, subtitlePreferences } = req.body;
+    const { videoUrl, verses, subtitlePreferences, subtitleOffset } = req.body;
     
     if (!videoUrl || !verses || !Array.isArray(verses) || verses.length === 0) {
       return res.status(400).json({
@@ -53,7 +53,7 @@ app.post('/process', async (req, res) => {
     console.log(`Created job ID: ${jobId}`);
     
     // Create SRT file from verses
-    const srtContent = generateSRT(verses, subtitlePreferences || {});
+    const srtContent = generateSRT(verses, { ...subtitlePreferences, subtitleOffset: subtitleOffset || 0 });
     console.log('Generated SRT content');
     
     // Upload SRT to S3
@@ -134,6 +134,7 @@ app.get('/status/:jobId', async (req, res) => {
       return res.json({
         success: true,
         status: 'complete',
+        progress: 100,
         outputUrl
       });
     }
@@ -160,6 +161,7 @@ app.get('/status/:jobId', async (req, res) => {
 function generateSRT(verses, preferences) {
   let srtContent = '';
   const offset = preferences.subtitleOffset || 0;
+  const display = preferences.lang || preferences.display || 'both';
   
   verses.forEach((verse, index) => {
     const startTime = (verse.startTime !== undefined ? verse.startTime : index * 5) + offset;
@@ -168,11 +170,11 @@ function generateSRT(verses, preferences) {
     srtContent += `${index + 1}\n`;
     srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(endTime)}\n`;
     
-    if (preferences.display !== 'translation') {
+    if (display !== 'translation') {
       srtContent += `${verse.arabic || ''}\n`;
     }
     
-    if (preferences.display !== 'arabic' && verse.translation) {
+    if (display !== 'arabic' && verse.translation) {
       srtContent += `${verse.translation}\n`;
     }
     
@@ -198,13 +200,16 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
   const fontSize = preferences.fontSize === 'large' ? 30 : 
                   preferences.fontSize === 'small' ? 18 : 24; // medium default
   
+  const opacity = preferences.opacity === 'high' ? 100 : 
+                 preferences.opacity === 'low' ? 40 : 70; // medium default
+  
   return {
     Role: process.env.MEDIACONVERT_ROLE_ARN,
     Settings: {
       Inputs: [{
         FileInput: videoUrl,
         CaptionSelectors: {
-          'Captions Selector 1': {
+          'CaptionSelector1': {
             SourceSettings: {
               SourceType: 'SRT',
               FileSourceSettings: {
@@ -215,6 +220,7 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
         }
       }],
       OutputGroups: [{
+        Name: "File Group",
         OutputGroupSettings: {
           Type: 'FILE_GROUP_SETTINGS',
           FileGroupSettings: {
@@ -223,10 +229,13 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
         },
         Outputs: [{
           VideoDescription: {
+            Width: 1280,
+            Height: 720,
             CodecSettings: {
               Codec: 'H_264',
               H264Settings: {
                 RateControlMode: 'QVBR',
+                MaxBitrate: 5000000,
                 QvbrSettings: {
                   QvbrQualityLevel: 8
                 }
@@ -248,13 +257,12 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
             Mp4Settings: {}
           },
           CaptionDescriptions: [{
-            CaptionSelectorName: 'Captions Selector 1',
+            CaptionSelectorName: 'CaptionSelector1',
             DestinationSettings: {
               DestinationType: 'BURN_IN',
-              BurnInSettings: {
+              BurnInCaptionSettings: {
                 FontSize: fontSize,
-                BackgroundOpacity: preferences.opacity === 'high' ? 100 : 
-                                  preferences.opacity === 'low' ? 40 : 70,
+                BackgroundOpacity: opacity,
                 FontColor: 'WHITE',
                 BackgroundColor: 'BLACK',
                 Alignment: 'CENTERED'
