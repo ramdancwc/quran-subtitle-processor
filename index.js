@@ -271,11 +271,7 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
           OutputGroupSettings: {
             Type: "FILE_GROUP_SETTINGS",
             FileGroupSettings: {
-              Destination: `s3://${process.env.S3_BUCKET}/${outputKey}`,
-              // Add ACL for security but ensure objects can be accessed with signed URLs
-              AccessControl: {
-                CannedAcl: "PRIVATE"
-              }
+              Destination: `s3://${process.env.S3_BUCKET}/${outputKey}`
             }
           },
           Outputs: [
