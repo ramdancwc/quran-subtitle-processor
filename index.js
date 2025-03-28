@@ -197,69 +197,141 @@ function formatSRTTime(seconds) {
 
 // Create MediaConvert job parameters
 function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
-  // Configure based on preferences
-  const fontSize = preferences.fontSize === 'large' ? 30 : 
-                  preferences.fontSize === 'small' ? 18 : 24; // medium default
-  
-  const opacity = preferences.opacity === 'high' ? 100 : 
-                 preferences.opacity === 'low' ? 40 : 70; // medium default
-  
   return {
     Role: process.env.MEDIACONVERT_ROLE_ARN,
     Settings: {
-      Inputs: [{
-        FileInput: videoUrl,
-        CaptionSelectors: {
-          'Captions': {
-            SourceSettings: {
-              SourceType: 'SRT',
-              FileSourceSettings: {
-                SourceFile: `s3://${process.env.S3_BUCKET}/${srtKey}`
+      InputGroups: [],
+      AdAvailOffset: 0,
+      Inputs: [
+        {
+          AudioSelectors: {
+            "Audio Selector 1": {
+              Offset: 0,
+              DefaultSelection: "DEFAULT",
+              ProgramSelection: 1,
+            }
+          },
+          VideoSelector: {
+            ColorSpace: "FOLLOW",
+            Rotate: "AUTO",
+            AlphaBehavior: "DISCARD"
+          },
+          FilterEnable: "AUTO",
+          PsiControl: "USE_PSI",
+          FilterStrength: 0,
+          DeblockFilter: "DISABLED",
+          DenoiseFilter: "DISABLED",
+          TimecodeSource: "EMBEDDED",
+          FileInput: videoUrl,
+          CaptionSelectors: {
+            "Captions Selector 1": {
+              SourceSettings: {
+                SourceType: "SRT",
+                FileSourceSettings: {
+                  SourceFile: `s3://${process.env.S3_BUCKET}/${srtKey}`,
+                  TimeDelta: 0
+                }
               }
             }
           }
         }
-      }],
-      OutputGroups: [{
-        Name: "File Group",
-        OutputGroupSettings: {
-          Type: 'FILE_GROUP_SETTINGS',
-          FileGroupSettings: {
-            Destination: `s3://${process.env.S3_BUCKET}/${outputKey}`
-          }
-        },
-        Outputs: [{
-          VideoDescription: {
-            CodecSettings: {
-              Codec: 'H_264',
-              H264Settings: {
-                RateControlMode: 'QVBR',
-                QvbrSettings: {
-                  QvbrQualityLevel: 8
+      ],
+      OutputGroups: [
+        {
+          Name: "File Group",
+          OutputGroupSettings: {
+            Type: "FILE_GROUP_SETTINGS",
+            FileGroupSettings: {
+              Destination: `s3://${process.env.S3_BUCKET}/${outputKey}`
+            }
+          },
+          Outputs: [
+            {
+              VideoDescription: {
+                ScalingBehavior: "DEFAULT",
+                TimecodeInsertion: "DISABLED",
+                AntiAlias: "ENABLED",
+                Sharpness: 50,
+                CodecSettings: {
+                  Codec: "H_264",
+                  H264Settings: {
+                    InterlaceMode: "PROGRESSIVE",
+                    NumberReferenceFrames: 3,
+                    Syntax: "DEFAULT",
+                    Softness: 0,
+                    GopClosedCadence: 1,
+                    GopSize: 90,
+                    Slices: 1,
+                    GopBReference: "DISABLED",
+                    SlowPal: "DISABLED",
+                    SpatialAdaptiveQuantization: "ENABLED",
+                    TemporalAdaptiveQuantization: "ENABLED",
+                    FlickerAdaptiveQuantization: "DISABLED",
+                    EntropyEncoding: "CABAC",
+                    Bitrate: 5000000,
+                    FramerateControl: "INITIALIZE_FROM_SOURCE",
+                    RateControlMode: "CBR",
+                    CodecProfile: "MAIN",
+                    Telecine: "NONE",
+                    MinIInterval: 0,
+                    AdaptiveQuantization: "HIGH",
+                    CodecLevel: "AUTO",
+                    FieldEncoding: "PAFF",
+                    SceneChangeDetect: "ENABLED",
+                    QualityTuningLevel: "SINGLE_PASS",
+                    FramerateConversionAlgorithm: "DUPLICATE_DROP",
+                    UnregisteredSeiTimecode: "DISABLED",
+                    GopSizeUnits: "FRAMES",
+                    ParControl: "INITIALIZE_FROM_SOURCE",
+                    NumberBFramesBetweenReferenceFrames: 2,
+                    RepeatPps: "DISABLED",
+                    DynamicSubGop: "STATIC"
+                  }
+                },
+                AfdSignaling: "NONE",
+                DropFrameTimecode: "ENABLED",
+                RespondToAfd: "NONE",
+                ColorMetadata: "INSERT"
+              },
+              AudioDescriptions: [
+                {
+                  AudioTypeControl: "FOLLOW_INPUT",
+                  CodecSettings: {
+                    Codec: "AAC",
+                    AacSettings: {
+                      AudioDescriptionBroadcasterMix: "NORMAL",
+                      Bitrate: 96000,
+                      RateControlMode: "CBR",
+                      CodecProfile: "LC",
+                      CodingMode: "CODING_MODE_2_0",
+                      RawFormat: "NONE",
+                      SampleRate: 48000,
+                      Specification: "MPEG4"
+                    }
+                  },
+                  LanguageCodeControl: "FOLLOW_INPUT"
                 }
-              }
+              ],
+              ContainerSettings: {
+                Container: "MP4",
+                Mp4Settings: {
+                  CslgAtom: "INCLUDE",
+                  FreeSpaceBox: "EXCLUDE",
+                  MoovPlacement: "PROGRESSIVE_DOWNLOAD"
+                }
+              },
+              CaptionDescriptions: [
+                {
+                  CaptionSelectorName: "Captions Selector 1",
+                  DestinationSettings: {
+                    DestinationType: "BURN_IN"
+                  }
+                }
+              ]
             }
-          },
-          AudioDescriptions: [{
-            CodecSettings: {
-              Codec: 'AAC',
-              AacSettings: {
-                Bitrate: 96000,
-                CodingMode: 'CODING_MODE_2_0',
-                SampleRate: 48000
-              }
-            }
-          }],
-          ContainerSettings: {
-            Container: 'MP4',
-            Mp4Settings: {}
-          },
-          CaptionDescriptions: [{
-            CaptionSelectorName: 'Captions',
-            DestinationType: 'BURN_IN'
-          }]
-        }]
-      }]
+          ]
+        }
+      ]
     }
   };
 }
