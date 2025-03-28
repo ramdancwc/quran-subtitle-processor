@@ -127,7 +127,6 @@ app.post('/process', async (req, res) => {
 });
 
 // Endpoint to check job status
-// Endpoint to check job status
 app.get('/status/:jobId', async (req, res) => {
   const { jobId } = req.params;
   
@@ -151,20 +150,29 @@ app.get('/status/:jobId', async (req, res) => {
     console.log(`Job status: ${status}`);
     
     if (status === 'COMPLETE') {
-      // Generate public URL for the output
-      const outputUrl = `https://${process.env.S3_BUCKET}.s3.amazonaws.com/outputs/${jobId}.mp4`;
+      // Generate a pre-signed URL for the output that expires in 24 hours
+      const signedUrlExpireSeconds = 24 * 60 * 60;
+      const params = {
+        Bucket: process.env.S3_BUCKET,
+        Key: `outputs/${jobId}.mp4`,
+        Expires: signedUrlExpireSeconds,
+        ResponseContentDisposition: 'attachment; filename="quran-recitation-with-subtitles.mp4"',
+        ResponseContentType: 'video/mp4'
+      };
+      
+      const url = await s3.getSignedUrlPromise('getObject', params);
       
       // Update job status
       jobsDB[jobId].status = 'COMPLETE';
-      jobsDB[jobId].outputUrl = outputUrl;
+      jobsDB[jobId].outputUrl = url;
       
-      console.log(`Job complete. Output URL: ${outputUrl}`);
+      console.log(`Job complete. Signed URL generated.`);
       
       return res.json({
         success: true,
         status: 'complete',
         progress: 100,
-        outputUrl
+        outputUrl: url
       });
     } else if (status === 'ERROR') {
       // Get the error details
@@ -233,9 +241,6 @@ function formatSRTTime(seconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
 }
 
-
-// Create MediaConvert job parameters
-// Create MediaConvert job parameters
 // Create MediaConvert job parameters
 function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
   return {
@@ -266,7 +271,11 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
           OutputGroupSettings: {
             Type: "FILE_GROUP_SETTINGS",
             FileGroupSettings: {
-              Destination: `s3://${process.env.S3_BUCKET}/${outputKey}`
+              Destination: `s3://${process.env.S3_BUCKET}/${outputKey}`,
+              // Add ACL for security but ensure objects can be accessed with signed URLs
+              AccessControl: {
+                CannedAcl: "PRIVATE"
+              }
             }
           },
           Outputs: [
