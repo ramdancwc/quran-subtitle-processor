@@ -194,6 +194,7 @@ function formatSRTTime(seconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
 }
 
+
 // Create MediaConvert job parameters
 function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
   // Configure based on preferences
@@ -209,7 +210,7 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
       Inputs: [{
         FileInput: videoUrl,
         CaptionSelectors: {
-          'CaptionSelector1': {
+          'Captions': {
             SourceSettings: {
               SourceType: 'SRT',
               FileSourceSettings: {
@@ -229,13 +230,10 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
         },
         Outputs: [{
           VideoDescription: {
-            Width: 1280,
-            Height: 720,
             CodecSettings: {
               Codec: 'H_264',
               H264Settings: {
                 RateControlMode: 'QVBR',
-                MaxBitrate: 5000000,
                 QvbrSettings: {
                   QvbrQualityLevel: 8
                 }
@@ -257,17 +255,8 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
             Mp4Settings: {}
           },
           CaptionDescriptions: [{
-            CaptionSelectorName: 'CaptionSelector1',
-            DestinationSettings: {
-              DestinationType: 'BURN_IN',
-              BurnInCaptionSettings: {
-                FontSize: fontSize,
-                BackgroundOpacity: opacity,
-                FontColor: 'WHITE',
-                BackgroundColor: 'BLACK',
-                Alignment: 'CENTERED'
-              }
-            }
+            CaptionSelectorName: 'Captions',
+            DestinationType: 'BURN_IN'
           }]
         }]
       }]
