@@ -53,22 +53,22 @@ app.post('/process', async (req, res) => {
     const jobId = uuidv4();
     console.log(`Created job ID: ${jobId}`);
     
-    // Generate ASS content for better subtitle formatting
-    const assContent = generateASS(verses, { ...subtitlePreferences, subtitleOffset: subtitleOffset || 0 });
-    console.log('Generated ASS content');
+    // Create SRT file from verses
+    const srtContent = generateSRT(verses, { ...subtitlePreferences, subtitleOffset: subtitleOffset || 0 });
+    console.log('Generated SRT content');
     
-    // Upload ASS to S3
-    const assKey = `subtitles/${jobId}.ass`;
-    console.log(`Uploading ASS to S3: ${assKey}`);
+    // Upload SRT to S3
+    const srtKey = `subtitles/${jobId}.srt`;
+    console.log(`Uploading SRT to S3: ${srtKey}`);
     
     await s3.putObject({
       Bucket: process.env.S3_BUCKET,
-      Key: assKey,
-      Body: assContent,
+      Key: srtKey,
+      Body: srtContent,
       ContentType: 'text/plain'
     }).promise();
     
-    console.log('ASS file uploaded successfully');
+    console.log('SRT file uploaded successfully');
     
     // Download video from Supabase URL to memory
     console.log('Downloading video from Supabase...');
@@ -99,7 +99,7 @@ app.post('/process', async (req, res) => {
     
     // Create MediaConvert job
     const outputKey = `outputs/${jobId}.mp4`;
-    const params = createMediaConvertParams(s3VideoUrl, assKey, outputKey, subtitlePreferences || {});
+    const params = createMediaConvertParams(s3VideoUrl, srtKey, outputKey, subtitlePreferences || {});
     
     console.log('Creating MediaConvert job...');
     const job = await mediaConvert.createJob(params).promise();
@@ -231,110 +231,6 @@ app.get('/status/:jobId', async (req, res) => {
   }
 });
 
-// Generate ASS subtitle file content
-function generateASS(verses, preferences) {
-  // Default values if preferences are not provided
-  const offset = preferences.subtitleOffset || 0;
-  const display = preferences.lang || preferences.display || 'both';
-  const fontSize = preferences.fontSize === 'large' ? 30 : 
-                  preferences.fontSize === 'small' ? 18 : 24; // medium default
-  
-  // Build ASS header
-  let assContent = `[Script Info]
-Title: Quran Recitation Subtitles
-ScriptType: v4.00+
-WrapStyle: 0
-ScaledBorderAndShadow: yes
-YCbCr Matrix: None
-PlayResX: 1280
-PlayResY: 720
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Arabic,Arial Unicode MS,${fontSize + 6},&H00FFFFFF,&H000000FF,&H00000000,&HC0000000,1,0,0,0,100,100,0,0,1,2,1,2,10,10,20,1
-Style: Translation,Arial,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&HC0000000,0,0,0,0,100,100,0,0,1,1.5,0.5,2,10,10,45,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-`;
-
-  // Add dialog entries for each verse
-  verses.forEach((verse, index) => {
-    const startTime = (verse.startTime !== undefined ? verse.startTime : index * 5) + offset;
-    const endTime = (verse.endTime !== undefined ? verse.endTime : (index + 1) * 5) + offset;
-    
-    // Format time for ASS (H:MM:SS.cc)
-    const formatAssTime = (seconds) => {
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      const secs = Math.floor(seconds % 60);
-      const centiseconds = Math.floor((seconds % 1) * 100);
-      
-      return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
-    };
-    
-    // Add Arabic text if needed
-    if (display !== 'translation' && verse.arabic) {
-      // Escape any special characters in the text
-      const escapedArabic = verse.arabic
-        .replace(/\\/g, '\\\\')
-        .replace(/\{/g, '\\{')
-        .replace(/\}/g, '\\}');
-        
-      assContent += `Dialogue: 0,${formatAssTime(startTime)},${formatAssTime(endTime)},Arabic,,0,0,0,,${escapedArabic}\n`;
-    }
-    
-    // Add translation text if needed
-    if (display !== 'arabic' && verse.translation) {
-      // Determine where to position the translation (after Arabic if both are shown)
-      let marginV = 20;
-      if (display === 'both') {
-        marginV = 70; // Push translation down if Arabic is also shown
-      }
-      
-      // Format translation with line breaks for readability
-      const formattedTranslation = formatTranslationText(verse.translation);
-      
-      assContent += `Dialogue: 0,${formatAssTime(startTime)},${formatAssTime(endTime)},Translation,,0,0,${marginV},,${formattedTranslation}\n`;
-    }
-  });
-  
-  return assContent;
-}
-
-// Format translation text with line breaks
-function formatTranslationText(text) {
-  if (!text) return '';
-  
-  // Escape any special characters in the text
-  text = text
-    .replace(/\\/g, '\\\\')
-    .replace(/\{/g, '\\{')
-    .replace(/\}/g, '\\}');
-  
-  // Break long lines
-  const maxCharsPerLine = 50;
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = '';
-  
-  for (const word of words) {
-    if ((currentLine + word).length > maxCharsPerLine) {
-      lines.push(currentLine.trim());
-      currentLine = word + ' ';
-    } else {
-      currentLine += word + ' ';
-    }
-  }
-  
-  if (currentLine.trim()) {
-    lines.push(currentLine.trim());
-  }
-  
-  // Join lines with ASS line break marker
-  return lines.join('\\N');
-}
-
 // Helper function to generate SRT content
 function generateSRT(verses, preferences) {
   let srtContent = '';
@@ -373,15 +269,7 @@ function formatSRTTime(seconds) {
 }
 
 // Create MediaConvert job parameters
-// Create MediaConvert job parameters
-function createMediaConvertParams(videoUrl, subtitleKey, outputKey, preferences) {
-  // Configure subtitle styling based on preferences
-  const fontSize = preferences.fontSize === 'large' ? 30 : 
-                 preferences.fontSize === 'small' ? 18 : 24; // medium default
-  
-  // Determine subtitle type from file extension
-  const isAssFormat = subtitleKey.endsWith('.ass');
-  
+function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
   return {
     Role: process.env.MEDIACONVERT_ROLE_ARN,
     Settings: {
@@ -396,9 +284,9 @@ function createMediaConvertParams(videoUrl, subtitleKey, outputKey, preferences)
           CaptionSelectors: {
             "Captions": {
               SourceSettings: {
-                SourceType: isAssFormat ? "ASS" : "SRT",
+                SourceType: "SRT",
                 FileSourceSettings: {
-                  SourceFile: `s3://${process.env.S3_BUCKET}/${subtitleKey}`
+                  SourceFile: `s3://${process.env.S3_BUCKET}/${srtKey}`
                 }
               }
             }
@@ -416,9 +304,6 @@ function createMediaConvertParams(videoUrl, subtitleKey, outputKey, preferences)
           Outputs: [
             {
               VideoDescription: {
-                // Add width and height to ensure consistent video dimensions
-                Width: 1280,
-                Height: 720,
                 CodecSettings: {
                   Codec: "H_264",
                   H264Settings: {
@@ -446,26 +331,8 @@ function createMediaConvertParams(videoUrl, subtitleKey, outputKey, preferences)
               CaptionDescriptions: [
                 {
                   CaptionSelectorName: "Captions",
-                  DestinationType: "BURN_IN",
-                  BurnInCaptionSettings: {
-                    TextGridPosition: "BOTTOM_CENTER",
-                    FontSize: fontSize,
-                    FontColor: "WHITE",
-                    FontOpacity: 100,
-                    BackgroundColor: "BLACK", 
-                    BackgroundOpacity: 80,      // Semi-transparent background
-                    OutlineColor: "BLACK",
-                    OutlineSize: 2,             // Add outline for better visibility
-                    ShadowColor: "BLACK",
-                    ShadowOpacity: 80,
-                    ShadowXOffset: 2,
-                    ShadowYOffset: 2,
-                    StylePassthrough: "ENABLED", // Preserve styling if available
-                    // Keep subtitles within safe margins
-                    HorizontalPosition: 400,     // Horizontal centering (0-100%)
-                    VerticalPosition: 90,        // Position from top (90% = near bottom)
-                    TeletextSpacing: "AUTO",     // Auto spacing
-                    Width: 80                    // Width as percentage of video width (80%)
+                  DestinationSettings: {
+                    DestinationType: "BURN_IN"
                   }
                 }
               ]
