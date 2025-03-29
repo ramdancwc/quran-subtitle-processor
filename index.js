@@ -54,21 +54,21 @@ app.post('/process', async (req, res) => {
     console.log(`Created job ID: ${jobId}`);
     
     // Create SRT file from verses
-    const srtContent = generateSRT(verses, { ...subtitlePreferences, subtitleOffset: subtitleOffset || 0 });
-    console.log('Generated SRT content');
+   const assContent = generateASS(verses, { ...subtitlePreferences, subtitleOffset: subtitleOffset || 0 });
+    console.log('Generated ASS content');
     
     // Upload SRT to S3
-    const srtKey = `subtitles/${jobId}.srt`;
-    console.log(`Uploading SRT to S3: ${srtKey}`);
+    const assKey = `subtitles/${jobId}.ass`;
+    console.log(`Uploading ASS to S3: ${srtKey}`);
     
     await s3.putObject({
-      Bucket: process.env.S3_BUCKET,
-      Key: srtKey,
-      Body: srtContent,
-      ContentType: 'text/plain'
-    }).promise();
+  Bucket: process.env.S3_BUCKET,
+  Key: assKey,
+  Body: assContent,
+  ContentType: 'text/plain'
+}).promise();
     
-    console.log('SRT file uploaded successfully');
+    console.log('ASS file uploaded successfully');
     
     // Download video from Supabase URL to memory
     console.log('Downloading video from Supabase...');
@@ -270,6 +270,10 @@ function formatSRTTime(seconds) {
 
 // Create MediaConvert job parameters
 function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
+  // Configure subtitle styling based on preferences
+  const fontSize = preferences.fontSize === 'large' ? 30 : 
+                 preferences.fontSize === 'small' ? 18 : 24; // medium default
+  
   return {
     Role: process.env.MEDIACONVERT_ROLE_ARN,
     Settings: {
@@ -281,16 +285,16 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
               DefaultSelection: "DEFAULT"
             }
           },
-          CaptionSelectors: {
-            "Captions": {
-              SourceSettings: {
-                SourceType: "SRT",
-                FileSourceSettings: {
-                  SourceFile: `s3://${process.env.S3_BUCKET}/${srtKey}`
-                }
-              }
-            }
-          }
+         CaptionSelectors: {
+  "Captions": {
+    SourceSettings: {
+      SourceType: "SCC", // Change SRT to SCC or whatever format you're using
+      FileSourceSettings: {
+        SourceFile: `s3://${process.env.S3_BUCKET}/${assKey}`
+      }
+    }
+  }
+}
         }
       ],
       OutputGroups: [
@@ -304,6 +308,9 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
           Outputs: [
             {
               VideoDescription: {
+                // Add width and height to ensure consistent video dimensions
+                Width: 1280,
+                Height: 720,
                 CodecSettings: {
                   Codec: "H_264",
                   H264Settings: {
@@ -332,7 +339,28 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
                 {
                   CaptionSelectorName: "Captions",
                   DestinationSettings: {
-                    DestinationType: "BURN_IN"
+                    DestinationType: "BURN_IN",
+                    BurnInCaptionSettings: {
+                      // Improved subtitle settings
+                      TextGridPosition: "BOTTOM_CENTER",
+                      FontSize: fontSize,
+                      FontColor: "WHITE",
+                      FontOpacity: 100,
+                      BackgroundColor: "BLACK", 
+                      BackgroundOpacity: 80,      // Semi-transparent background
+                      OutlineColor: "BLACK",
+                      OutlineSize: 2,             // Add outline for better visibility
+                      ShadowColor: "BLACK",
+                      ShadowOpacity: 80,
+                      ShadowXOffset: 2,
+                      ShadowYOffset: 2,
+                      StylePassthrough: "ENABLED", // Preserve SRT styling if available
+                      // Keep subtitles within safe margins
+                      HorizontalPosition: 400,     // Horizontal centering (0-100%)
+                      VerticalPosition: 90,        // Position from top (90% = near bottom)
+                      TeletextSpacing: "AUTO",     // Auto spacing
+                      Width: 80                    // Width as percentage of video width (80%)
+                    }
                   }
                 }
               ]
