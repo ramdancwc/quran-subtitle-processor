@@ -53,8 +53,8 @@ app.post('/process', async (req, res) => {
     const jobId = uuidv4();
     console.log(`Created job ID: ${jobId}`);
     
-    // Create SRT file from verses
-    const srtContent = generateSRT(verses, { ...subtitlePreferences, subtitleOffset: subtitleOffset || 0 });
+    // Create SRT file from verses with enhanced RTL support
+    const srtContent = generateEnhancedSRT(verses, { ...subtitlePreferences, subtitleOffset: subtitleOffset || 0 });
     console.log('Generated SRT content');
     
     // Upload SRT to S3
@@ -231,11 +231,14 @@ app.get('/status/:jobId', async (req, res) => {
   }
 });
 
-// Helper function to generate SRT content
-function generateSRT(verses, preferences) {
-  let srtContent = '';
+// Enhanced SRT generation with RTL markers and line wrapping for Arabic text
+function generateEnhancedSRT(verses, preferences) {
+  // Add UTF-8 BOM for better compatibility with Arabic text
+  let srtContent = '\uFEFF';
+  
   const offset = preferences.subtitleOffset || 0;
   const display = preferences.lang || preferences.display || 'both';
+  const maxLineLength = 40; // Maximum characters per line to prevent overflow
   
   verses.forEach((verse, index) => {
     const startTime = (verse.startTime !== undefined ? verse.startTime : index * 5) + offset;
@@ -244,18 +247,69 @@ function generateSRT(verses, preferences) {
     srtContent += `${index + 1}\n`;
     srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(endTime)}\n`;
     
-    if (display !== 'translation') {
-      srtContent += `${verse.arabic || ''}\n`;
+    // Array to store all lines for this subtitle entry
+    const contentLines = [];
+    
+    // Process Arabic text with RTL marker
+    if (display !== 'translation' && verse.arabic) {
+      // Add RTL marker for proper Arabic text direction
+      const rtlMark = '\u200F';
+      
+      // Break long Arabic text into multiple lines
+      const arabicLines = wrapText(verse.arabic, maxLineLength);
+      arabicLines.forEach(line => {
+        contentLines.push(`${rtlMark}${line}`);
+      });
     }
     
+    // Process translation text
     if (display !== 'arabic' && verse.translation) {
-      srtContent += `${verse.translation}\n`;
+      // Add an empty line between Arabic and translation for better spacing
+      if (display === 'both' && verse.arabic && contentLines.length > 0) {
+        contentLines.push('');
+      }
+      
+      // Break long translation text into multiple lines
+      const translationLines = wrapText(verse.translation, maxLineLength);
+      translationLines.forEach(line => {
+        contentLines.push(line);
+      });
     }
     
-    srtContent += '\n';
+    // Join all lines with newlines and add to SRT content
+    srtContent += contentLines.join('\n') + '\n\n';
   });
   
   return srtContent;
+}
+
+// Helper function to wrap text to prevent overflow
+function wrapText(text, maxCharsPerLine) {
+  if (!text) return [];
+  
+  const words = text.split(' ');
+  const lines = [];
+  let currentLine = '';
+  
+  for (const word of words) {
+    if ((currentLine + word).length > maxCharsPerLine) {
+      if (currentLine) lines.push(currentLine.trim());
+      currentLine = word + ' ';
+    } else {
+      currentLine += word + ' ';
+    }
+  }
+  
+  if (currentLine.trim()) {
+    lines.push(currentLine.trim());
+  }
+  
+  return lines;
+}
+
+// Original helper function for backwards compatibility
+function generateSRT(verses, preferences) {
+  return generateEnhancedSRT(verses, preferences);
 }
 
 // Format time for SRT (00:00:00,000)
@@ -268,8 +322,12 @@ function formatSRTTime(seconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
 }
 
-// Create MediaConvert job parameters
+// Create MediaConvert job parameters with improved subtitle display
 function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
+  // Configure subtitle styling based on preferences
+  const fontSize = preferences.fontSize === 'large' ? 30 : 
+                 preferences.fontSize === 'small' ? 18 : 24; // medium default
+  
   return {
     Role: process.env.MEDIACONVERT_ROLE_ARN,
     Settings: {
@@ -295,6 +353,7 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
       ],
       OutputGroups: [
         {
+          Name: "File Group",
           OutputGroupSettings: {
             Type: "FILE_GROUP_SETTINGS",
             FileGroupSettings: {
@@ -331,8 +390,24 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
               CaptionDescriptions: [
                 {
                   CaptionSelectorName: "Captions",
-                  DestinationSettings: {
-                    DestinationType: "BURN_IN"
+                  DestinationType: "BURN_IN",
+                  BurnInCaptionSettings: {
+                    TextGridPosition: "BOTTOM_CENTER",
+                    FontSize: fontSize,
+                    FontColor: "WHITE",
+                    FontOpacity: 100,
+                    BackgroundColor: "BLACK", 
+                    BackgroundOpacity: 80,
+                    OutlineColor: "BLACK",
+                    OutlineSize: 2,
+                    ShadowColor: "BLACK",
+                    ShadowOpacity: 80,
+                    ShadowXOffset: 2,
+                    ShadowYOffset: 2,
+                    // Control width to prevent overflow
+                    Width: 70,  // 70% of video width
+                    HorizontalPosition: 50,  // Centered
+                    VerticalPosition: 90     // Near bottom but not too close
                   }
                 }
               ]
