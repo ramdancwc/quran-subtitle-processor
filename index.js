@@ -373,6 +373,7 @@ function formatSRTTime(seconds) {
 }
 
 // Create MediaConvert job parameters
+// Create MediaConvert job parameters
 function createMediaConvertParams(videoUrl, subtitleKey, outputKey, preferences) {
   // Configure subtitle styling based on preferences
   const fontSize = preferences.fontSize === 'large' ? 30 : 
@@ -445,29 +446,26 @@ function createMediaConvertParams(videoUrl, subtitleKey, outputKey, preferences)
               CaptionDescriptions: [
                 {
                   CaptionSelectorName: "Captions",
-                  DestinationSettings: {
-                    DestinationType: "BURN_IN",
-                    BurnInCaptionSettings: {
-                      // Improved subtitle settings
-                      TextGridPosition: "BOTTOM_CENTER",
-                      FontSize: fontSize,
-                      FontColor: "WHITE",
-                      FontOpacity: 100,
-                      BackgroundColor: "BLACK", 
-                      BackgroundOpacity: 80,      // Semi-transparent background
-                      OutlineColor: "BLACK",
-                      OutlineSize: 2,             // Add outline for better visibility
-                      ShadowColor: "BLACK",
-                      ShadowOpacity: 80,
-                      ShadowXOffset: 2,
-                      ShadowYOffset: 2,
-                      StylePassthrough: "ENABLED", // Preserve styling if available
-                      // Keep subtitles within safe margins
-                      HorizontalPosition: 400,     // Horizontal centering (0-100%)
-                      VerticalPosition: 90,        // Position from top (90% = near bottom)
-                      TeletextSpacing: "AUTO",     // Auto spacing
-                      Width: 80                    // Width as percentage of video width (80%)
-                    }
+                  DestinationType: "BURN_IN",
+                  BurnInCaptionSettings: {
+                    TextGridPosition: "BOTTOM_CENTER",
+                    FontSize: fontSize,
+                    FontColor: "WHITE",
+                    FontOpacity: 100,
+                    BackgroundColor: "BLACK", 
+                    BackgroundOpacity: 80,      // Semi-transparent background
+                    OutlineColor: "BLACK",
+                    OutlineSize: 2,             // Add outline for better visibility
+                    ShadowColor: "BLACK",
+                    ShadowOpacity: 80,
+                    ShadowXOffset: 2,
+                    ShadowYOffset: 2,
+                    StylePassthrough: "ENABLED", // Preserve styling if available
+                    // Keep subtitles within safe margins
+                    HorizontalPosition: 400,     // Horizontal centering (0-100%)
+                    VerticalPosition: 90,        // Position from top (90% = near bottom)
+                    TeletextSpacing: "AUTO",     // Auto spacing
+                    Width: 80                    // Width as percentage of video width (80%)
                   }
                 }
               ]
