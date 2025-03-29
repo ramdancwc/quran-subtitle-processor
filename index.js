@@ -102,6 +102,8 @@ app.post('/process', async (req, res) => {
     const params = createMediaConvertParams(s3VideoUrl, srtKey, outputKey, subtitlePreferences || {});
     
     console.log('Creating MediaConvert job...');
+    console.log('Job parameters:', JSON.stringify(params, null, 2));
+    
     const job = await mediaConvert.createJob(params).promise();
     console.log(`MediaConvert job created: ${job.Job.Id}`);
     
@@ -322,7 +324,7 @@ function formatSRTTime(seconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
 }
 
-// Create MediaConvert job parameters with improved subtitle display
+// Create MediaConvert job parameters with correct structure
 function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
   // Configure subtitle styling based on preferences
   const fontSize = preferences.fontSize === 'large' ? 30 : 
@@ -390,24 +392,26 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
               CaptionDescriptions: [
                 {
                   CaptionSelectorName: "Captions",
-                  DestinationType: "BURN_IN",
-                  BurnInCaptionSettings: {
-                    TextGridPosition: "BOTTOM_CENTER",
-                    FontSize: fontSize,
-                    FontColor: "WHITE",
-                    FontOpacity: 100,
-                    BackgroundColor: "BLACK", 
-                    BackgroundOpacity: 80,
-                    OutlineColor: "BLACK",
-                    OutlineSize: 2,
-                    ShadowColor: "BLACK",
-                    ShadowOpacity: 80,
-                    ShadowXOffset: 2,
-                    ShadowYOffset: 2,
-                    // Control width to prevent overflow
-                    Width: 70,  // 70% of video width
-                    HorizontalPosition: 50,  // Centered
-                    VerticalPosition: 90     // Near bottom but not too close
+                  DestinationSettings: {
+                    DestinationType: "BURN_IN",
+                    BurnInCaptionSettings: {
+                      TextGridPosition: "BOTTOM_CENTER",
+                      FontSize: fontSize,
+                      FontColor: "WHITE",
+                      FontOpacity: 100,
+                      BackgroundColor: "BLACK", 
+                      BackgroundOpacity: 80,
+                      OutlineColor: "BLACK",
+                      OutlineSize: 2,
+                      ShadowColor: "BLACK",
+                      ShadowOpacity: 80,
+                      ShadowXOffset: 2,
+                      ShadowYOffset: 2,
+                      // Control width to prevent overflow
+                      Width: 70,  // 70% of video width
+                      HorizontalPosition: 50,  // Centered
+                      VerticalPosition: 90     // Near bottom but not too close
+                    }
                   }
                 }
               ]
