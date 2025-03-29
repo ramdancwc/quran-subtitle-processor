@@ -233,7 +233,7 @@ app.get('/status/:jobId', async (req, res) => {
   }
 });
 
-// Enhanced SRT generation with RTL markers and line wrapping for Arabic text
+// Enhanced SRT generation with better RTL handling for Arabic text
 function generateEnhancedSRT(verses, preferences) {
   // Add UTF-8 BOM for better compatibility with Arabic text
   let srtContent = '\uFEFF';
@@ -249,37 +249,47 @@ function generateEnhancedSRT(verses, preferences) {
     srtContent += `${index + 1}\n`;
     srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(endTime)}\n`;
     
-    // Array to store all lines for this subtitle entry
-    const contentLines = [];
+    // Create one combined subtitle text with appropriate formatting
+    let subtitleText = '';
     
-    // Process Arabic text with RTL marker
+    // Handle Arabic text
     if (display !== 'translation' && verse.arabic) {
-      // Add RTL marker for proper Arabic text direction
-      const rtlMark = '\u200F';
+      // Use RIGHT-TO-LEFT EMBEDDING (RLE) and PDF markers for proper RTL display
+      const rle = '\u202B'; // RIGHT-TO-LEFT EMBEDDING
+      const pdf = '\u202C'; // POP DIRECTIONAL FORMATTING
       
       // Break long Arabic text into multiple lines
       const arabicLines = wrapText(verse.arabic, maxLineLength);
-      arabicLines.forEach(line => {
-        contentLines.push(`${rtlMark}${line}`);
+      arabicLines.forEach((line, idx) => {
+        subtitleText += `${rle}${line}${pdf}`;
+        
+        // Only add newline if there are more Arabic lines or if there will be a translation
+        if (idx < arabicLines.length - 1 || (display === 'both' && verse.translation)) {
+          subtitleText += '\n';
+        }
       });
     }
     
-    // Process translation text
+    // Handle translation text
     if (display !== 'arabic' && verse.translation) {
-      // Add an empty line between Arabic and translation for better spacing
-      if (display === 'both' && verse.arabic && contentLines.length > 0) {
-        contentLines.push('');
+      // If we added Arabic text, ensure proper spacing
+      if (display === 'both' && verse.arabic) {
+        // We already added a newline after the last Arabic line
       }
       
-      // Break long translation text into multiple lines
       const translationLines = wrapText(verse.translation, maxLineLength);
-      translationLines.forEach(line => {
-        contentLines.push(line);
+      translationLines.forEach((line, idx) => {
+        subtitleText += line;
+        
+        // Add newline between lines but not after the last line
+        if (idx < translationLines.length - 1) {
+          subtitleText += '\n';
+        }
       });
     }
     
-    // Join all lines with newlines and add to SRT content
-    srtContent += contentLines.join('\n') + '\n\n';
+    // Add the complete subtitle text
+    srtContent += subtitleText + '\n\n';
   });
   
   return srtContent;
@@ -324,8 +334,12 @@ function formatSRTTime(seconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
 }
 
-// Create MediaConvert job parameters with minimal, compatible caption settings
+// Create MediaConvert job parameters with style passthrough enabled
 function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
+  // Configure subtitle styling based on preferences
+  const fontSize = preferences.fontSize === 'large' ? 30 : 
+                 preferences.fontSize === 'small' ? 18 : 24; // medium default
+  
   return {
     Role: process.env.MEDIACONVERT_ROLE_ARN,
     Settings: {
@@ -390,6 +404,14 @@ function createMediaConvertParams(videoUrl, srtKey, outputKey, preferences) {
                   CaptionSelectorName: "Captions",
                   DestinationSettings: {
                     DestinationType: "BURN_IN"
+                  },
+                  Style: {
+                    StylePassthrough: "ENABLED",
+                    FontColor: "WHITE",
+                    BackgroundColor: "BLACK",
+                    BackgroundOpacity: 90,
+                    FontOpacity: 100,
+                    ShadowColor: "BLACK"
                   }
                 }
               ]
