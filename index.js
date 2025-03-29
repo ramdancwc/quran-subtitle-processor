@@ -150,11 +150,48 @@ app.get('/status/:jobId', async (req, res) => {
     console.log(`Job status: ${status}`);
     
     if (status === 'COMPLETE') {
-      // Generate a pre-signed URL for the output that expires in 24 hours
+      // First check where MediaConvert has actually placed the file
+      const jobOutputs = jobResult.Job.Settings.OutputGroups[0].Outputs;
+      console.log(`Job output details:`, JSON.stringify(jobOutputs));
+      
+      // Get the destination that was used in the job
+      const destination = jobResult.Job.Settings.OutputGroups[0].OutputGroupSettings.FileGroupSettings.Destination;
+      console.log(`Job destination: ${destination}`);
+      
+      // Generate public URL for the output
+      // The correct output path might be different - this is what we need to verify
+      const outputKey = `outputs/${jobId}.mp4`;
+      console.log(`Checking for file at key: ${outputKey}`);
+      
+      // List the objects in the output folder to find the actual file
+      const listParams = {
+        Bucket: process.env.S3_BUCKET,
+        Prefix: 'outputs/'
+      };
+      
+      const listedObjects = await s3.listObjectsV2(listParams).promise();
+      console.log(`Found ${listedObjects.Contents.length} objects in outputs folder`);
+      
+      // Find objects that might match our job
+      const matchingObjects = listedObjects.Contents.filter(obj => 
+        obj.Key.includes(jobId) || obj.Key.includes(jobId.replace(/-/g, ''))
+      );
+      
+      console.log(`Found ${matchingObjects.length} objects matching job ID`);
+      matchingObjects.forEach(obj => console.log(`- ${obj.Key}`));
+      
+      // If we found a matching object, use that key
+      let actualOutputKey = outputKey;
+      if (matchingObjects.length > 0) {
+        actualOutputKey = matchingObjects[0].Key;
+        console.log(`Using actual file key: ${actualOutputKey}`);
+      }
+      
+      // Generate a pre-signed URL that expires in 24 hours
       const signedUrlExpireSeconds = 24 * 60 * 60;
       const params = {
         Bucket: process.env.S3_BUCKET,
-        Key: `outputs/${jobId}.mp4`,
+        Key: actualOutputKey,
         Expires: signedUrlExpireSeconds,
         ResponseContentDisposition: 'attachment; filename="quran-recitation-with-subtitles.mp4"',
         ResponseContentType: 'video/mp4'
@@ -166,23 +203,13 @@ app.get('/status/:jobId', async (req, res) => {
       jobsDB[jobId].status = 'COMPLETE';
       jobsDB[jobId].outputUrl = url;
       
-      console.log(`Job complete. Signed URL generated.`);
+      console.log(`Job complete. Output URL: ${url}`);
       
       return res.json({
         success: true,
         status: 'complete',
         progress: 100,
         outputUrl: url
-      });
-    } else if (status === 'ERROR') {
-      // Get the error details
-      const errorMessage = jobResult.Job.ErrorMessage || 'Unknown error';
-      console.error(`Job error: ${errorMessage}`);
-      
-      return res.json({
-        success: false,
-        status: 'failed',
-        error: errorMessage
       });
     }
     
